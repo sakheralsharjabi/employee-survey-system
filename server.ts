@@ -115,6 +115,8 @@ async function initDb() {
       console.error("❌ Database Access Denied Error:");
       console.error("   Please check your database credentials in Settings > Secrets.");
       console.error("   Ensure DB_HOST, DB_USER, DB_PASSWORD, and DB_NAME are correct.");
+      console.error("   CRITICAL: In TiDB Cloud, your username MUST be in the format 'ClusterID.root'.");
+      console.error(`   Current DB_USER in environment: "${process.env.DB_USER}"`);
       console.error("   Also, ensure your TiDB Cloud cluster has allowlisted the current IP (34.96.62.132).");
     } else {
       console.error("❌ Database connection failed:", err.message);
@@ -130,6 +132,15 @@ async function startServer() {
   const PORT = 3000;
   const JWT_SECRET = process.env.JWT_SECRET || "mobile-v2-secret";
   app.use(cors()); app.use(express.json());
+
+  app.get("/api/health", async (req, res) => {
+    try {
+      const [rows]: any = await pool.execute("SELECT 1 as ok");
+      res.json({ status: "ok", database: "connected", result: rows[0] });
+    } catch (err: any) {
+      res.status(500).json({ status: "error", database: "disconnected", error: err.message });
+    }
+  });
 
   const auth = (req: any, res: any, next: any) => {
     const token = req.headers['authorization']?.split(' ')[1];
@@ -148,11 +159,23 @@ async function startServer() {
 
   app.post("/api/auth/login", async (req, res) => {
     const { username, password } = req.body;
-    const [rows]: any = await pool.execute("SELECT * FROM users WHERE username = ?", [username]);
-    const user = rows[0];
-    if (!user || !bcrypt.compareSync(password, user.password)) return res.status(401).json({ message: "خطأ" });
-    const token = jwt.sign({ id: user.id, username: user.username, role: user.role, department_id: user.department_id, job_level_id: user.job_level_id }, JWT_SECRET);
-    res.json({ token, user: { id: user.id, username: user.username, role: user.role, full_name: user.full_name } });
+    try {
+      const [rows]: any = await pool.execute("SELECT * FROM users WHERE username = ?", [username]);
+      const user = rows[0];
+      if (!user) {
+        console.warn(`Login failed: User "${username}" not found.`);
+        return res.status(401).json({ message: "خطأ في اسم المستخدم أو كلمة المرور" });
+      }
+      if (!bcrypt.compareSync(password, user.password)) {
+        console.warn(`Login failed: Incorrect password for user "${username}".`);
+        return res.status(401).json({ message: "خطأ في اسم المستخدم أو كلمة المرور" });
+      }
+      const token = jwt.sign({ id: user.id, username: user.username, role: user.role, department_id: user.department_id, job_level_id: user.job_level_id }, JWT_SECRET);
+      res.json({ token, user: { id: user.id, username: user.username, role: user.role, full_name: user.full_name } });
+    } catch (err: any) {
+      console.error("Login Error:", err.message);
+      res.status(500).json({ message: "حدث خطأ في الاتصال بقاعدة البيانات. يرجى التأكد من إعدادات الاتصال." });
+    }
   });
 
   app.post("/api/admin/surveys/full", auth, isAdmin, async (req, res) => {

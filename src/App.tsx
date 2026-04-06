@@ -4,7 +4,7 @@ import {
   Users, ClipboardList, BarChart3, LogOut, Plus, 
   LayoutDashboard, Menu, X, ChevronRight, UserPlus, 
   Settings, Building2, Bell, Search,
-  CheckCircle2, Trash2, FileText
+  CheckCircle2, Trash2, FileText, AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import api from './lib/api';
@@ -22,24 +22,42 @@ const RTLWrapper = ({ children }: { children: React.ReactNode }) => (
   </div>
 );
 
+const safeParse = (key: string, fallback: any) => {
+  try {
+    const item = localStorage.getItem(key);
+    if (!item || item === 'undefined' || item === 'null') return fallback;
+    return JSON.parse(item);
+  } catch (e) {
+    return fallback;
+  }
+};
+
 const Login = ({ onLogin }: { onLogin: () => void }) => {
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('admin123');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [dbStatus, setDbStatus] = useState<'checking' | 'ok' | 'error'>('checking');
   const navigate = useNavigate();
+
+  useEffect(() => {
+    api.get('/health')
+      .then(() => setDbStatus('ok'))
+      .catch(() => setDbStatus('error'));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
     try {
       const res = await api.post('/auth/login', { username, password });
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('user', JSON.stringify(res.data.user));
       onLogin();
       navigate(res.data.user.role === 'admin' ? '/admin' : '/employee');
-    } catch (err) {
-      setError('خطأ في اسم المستخدم أو كلمة المرور');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'خطأ في اسم المستخدم أو كلمة المرور');
     } finally {
       setLoading(false);
     }
@@ -56,6 +74,12 @@ const Login = ({ onLogin }: { onLogin: () => void }) => {
           <p className="text-slate-400 font-medium">مرحباً بك مجدداً في منصتك</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-6">
+          {dbStatus === 'error' && (
+            <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 text-red-600 text-sm font-bold">
+              <AlertCircle className="w-5 h-5" />
+              <span>فشل الاتصال بقاعدة البيانات. يرجى التحقق من الإعدادات.</span>
+            </div>
+          )}
           <div className="space-y-2">
             <label className="block text-sm font-bold text-slate-700 mr-2">اسم المستخدم</label>
             <input type="text" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-600 outline-none transition-all text-lg font-medium" placeholder="أدخل اسم المستخدم" />
@@ -78,7 +102,7 @@ const AdminLayout = ({ children }: { children: React.ReactNode }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const user = safeParse('user', {});
 
   const menuItems = [
     { path: '/admin', icon: LayoutDashboard, label: 'الرئيسية' },
@@ -218,7 +242,8 @@ const AdminDashboard = () => {
 const EmployeeDashboard = () => {
   const [surveys, setSurveys] = useState<any[]>([]);
   const navigate = useNavigate();
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  
+  const user = safeParse('user', {});
 
   useEffect(() => { api.get('/employee/surveys').then(res => setSurveys(res.data)); }, []);
 
@@ -273,7 +298,7 @@ const EmployeeDashboard = () => {
 
 export default function App() {
   const [isAuth, setIsAuth] = useState(!!localStorage.getItem('token'));
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const user = safeParse('user', {});
 
   return (
     <RTLWrapper>
