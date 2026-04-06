@@ -106,12 +106,22 @@ async function initDb() {
       if (depts[0].count === 0) {
         for (const d of ["HR", "IT", "Marketing"]) await connection.execute("INSERT INTO departments (name) VALUES (?)", [d]);
         for (const l of ["Manager", "Senior", "Junior"]) await connection.execute("INSERT INTO job_levels (name) VALUES (?)", [l]);
+      }
+
+      const [adminCheck]: any = await connection.query("SELECT id FROM users WHERE username = 'admin'");
+      if (adminCheck.length === 0) {
         const hp = bcrypt.hashSync("admin123", 10);
         await connection.execute("INSERT INTO users (username, password, full_name, role) VALUES (?, ?, ?, ?)", ["admin", hp, "مدير النظام", "admin"]);
+        console.log("✅ Admin user created.");
+      }
+      
+      const [empCheck]: any = await connection.query("SELECT id FROM users WHERE username = 'employee1'");
+      if (empCheck.length === 0) {
+        const hp = bcrypt.hashSync("admin123", 10);
         await connection.execute("INSERT INTO users (username, password, full_name, role, department_id, job_level_id) VALUES (?, ?, ?, ?, ?, ?)", ["employee1", hp, "أحمد محمد", "employee", 1, 2]);
       }
     } catch (err: any) {
-      console.warn("Warning: Could not seed data. This is expected if tables don't exist or permissions are restricted.");
+      console.warn("Warning: Could not seed data:", err.message);
     }
   } catch (err: any) {
     if (err.code === 'ER_ACCESS_DENIED_ERROR') {
@@ -142,9 +152,27 @@ async function startServer() {
   app.get("/api/health", async (req, res) => {
     try {
       const [rows]: any = await pool.execute("SELECT 1 as ok");
-      res.json({ status: "ok", database: "connected", result: rows[0] });
+      res.json({ 
+        status: "ok", 
+        database: "connected", 
+        config: {
+          host: process.env.DB_HOST,
+          user: cleanUser,
+          database: process.env.DB_NAME,
+          port: process.env.DB_PORT || "4000"
+        }
+      });
     } catch (err: any) {
-      res.status(500).json({ status: "error", database: "disconnected", error: err.message });
+      console.error("Health Check Failed:", err.message);
+      res.status(500).json({ 
+        status: "error", 
+        database: "disconnected", 
+        error: err.message,
+        code: err.code,
+        suggestion: err.code === 'ER_ACCESS_DENIED_ERROR' 
+          ? "تأكد من اسم المستخدم وكلمة المرور وإضافة الـ IP لقائمة المسموح بهم في TiDB Cloud" 
+          : "تأكد من صحة عنوان المضيف (Host) والمنفذ (Port)"
+      });
     }
   });
 

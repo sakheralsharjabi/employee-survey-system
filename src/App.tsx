@@ -11,7 +11,7 @@ import api from './lib/api';
 import { cn } from './lib/utils';
 
 // Import modular components
-import SurveyBuilder from './components/Admin/SurveyBuilder';
+import SurveyBuilder from './components/SurveyBuilder';
 import Reports from './components/Admin/Reports';
 import SurveyRunner from './components/Employee/SurveyRunner';
 import UserManagement from './components/Admin/UserManagement';
@@ -42,8 +42,18 @@ const Login = ({ onLogin }: { onLogin: () => void }) => {
 
   useEffect(() => {
     api.get('/health')
-      .then(() => setDbStatus('ok'))
-      .catch(() => setDbStatus('error'));
+      .then((res) => {
+        if (res.data.database === 'connected') {
+          setDbStatus('ok');
+        } else {
+          setDbStatus('error');
+          setError(`خطأ في قاعدة البيانات: ${res.data.error || 'فشل الاتصال'}`);
+        }
+      })
+      .catch((err) => {
+        setDbStatus('error');
+        setError(err.response?.data?.error || 'فشل الاتصال بالخادم');
+      });
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -75,9 +85,12 @@ const Login = ({ onLogin }: { onLogin: () => void }) => {
         </div>
         <form onSubmit={handleSubmit} className="space-y-6">
           {dbStatus === 'error' && (
-            <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 text-red-600 text-sm font-bold">
-              <AlertCircle className="w-5 h-5" />
-              <span>فشل الاتصال بقاعدة البيانات. يرجى التحقق من الإعدادات.</span>
+            <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex flex-col gap-2 text-red-600 text-sm font-bold">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="w-5 h-5" />
+                <span>فشل الاتصال بقاعدة البيانات.</span>
+              </div>
+              <p className="text-xs font-medium opacity-80">{error}</p>
             </div>
           )}
           <div className="space-y-2">
