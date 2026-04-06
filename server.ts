@@ -22,8 +22,10 @@ const pool = mysql.createPool({
 });
 
 async function initDb() {
-  const connection = await pool.getConnection();
+  let connection;
   try {
+    connection = await pool.getConnection();
+    console.log("✅ Database connection successful.");
     const charset = "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
     const tables = [
       `CREATE TABLE IF NOT EXISTS departments (id INT PRIMARY KEY AUTO_INCREMENT, name VARCHAR(255) NOT NULL UNIQUE) ${charset}`,
@@ -108,8 +110,17 @@ async function initDb() {
     } catch (err: any) {
       console.warn("Warning: Could not seed data. This is expected if tables don't exist or permissions are restricted.");
     }
+  } catch (err: any) {
+    if (err.code === 'ER_ACCESS_DENIED_ERROR') {
+      console.error("❌ Database Access Denied Error:");
+      console.error("   Please check your database credentials in Settings > Secrets.");
+      console.error("   Ensure DB_HOST, DB_USER, DB_PASSWORD, and DB_NAME are correct.");
+      console.error("   Also, ensure your TiDB Cloud cluster has allowlisted the current IP (34.96.62.132).");
+    } else {
+      console.error("❌ Database connection failed:", err.message);
+    }
   } finally {
-    connection.release();
+    if (connection) connection.release();
   }
 }
 
