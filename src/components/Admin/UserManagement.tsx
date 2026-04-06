@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserPlus, Trash2, Edit2, Search, Upload, Download, X, Check, AlertCircle } from 'lucide-react';
+import { Users, UserPlus, Trash2, Edit2, Search, Upload, Download, X, Check, AlertCircle, Key } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import api from '../../lib/api';
 import { cn } from '../../lib/utils';
@@ -116,6 +116,16 @@ export default function UserManagement() {
     reader.readAsBinaryString(file);
   };
 
+  const handleResetPassword = async (id: number, username: string) => {
+    if (!confirm(`هل أنت متأكد من إعادة تعيين كلمة مرور المستخدم ${username} إلى 123456؟`)) return;
+    try {
+      await api.put(`/admin/users/${id}`, { password: '123456' });
+      alert('تم إعادة تعيين كلمة المرور بنجاح إلى 123456');
+    } catch (err) {
+      alert('فشل إعادة تعيين كلمة المرور');
+    }
+  };
+
   const filteredUsers = users.filter(u => 
     u.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     u.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -199,6 +209,7 @@ export default function UserManagement() {
                   </td>
                   <td className="px-6 py-5">
                     <div className="flex justify-center gap-2">
+                      <button onClick={() => handleResetPassword(u.id, u.username)} title="إعادة تعيين كلمة المرور" className="p-2 text-slate-400 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-all"><Key className="w-4 h-4" /></button>
                       <button onClick={() => handleOpenModal(u)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"><Edit2 className="w-4 h-4" /></button>
                       <button onClick={() => handleDelete(u.id)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"><Trash2 className="w-4 h-4" /></button>
                     </div>

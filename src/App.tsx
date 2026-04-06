@@ -297,7 +297,10 @@ const EmployeeDashboard = () => {
 };
 
 export default function App() {
-  const [isAuth, setIsAuth] = useState(!!localStorage.getItem('token'));
+  const [isAuth, setIsAuth] = useState(() => {
+    const token = localStorage.getItem('token');
+    return !!token && token !== 'undefined' && token !== 'null';
+  });
   const user = safeParse('user', {});
 
   return (

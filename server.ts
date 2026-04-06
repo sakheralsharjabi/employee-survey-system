@@ -9,9 +9,12 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+const dbUser = process.env.DB_USER;
+const cleanUser = dbUser?.endsWith('.root.root') ? dbUser.replace('.root.root', '.root') : dbUser;
+
 const pool = mysql.createPool({
   host: process.env.DB_HOST,
-  user: process.env.DB_USER,
+  user: cleanUser,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   port: parseInt(process.env.DB_PORT || "4000"),
@@ -117,7 +120,10 @@ async function initDb() {
       console.error("   Ensure DB_HOST, DB_USER, DB_PASSWORD, and DB_NAME are correct.");
       console.error("   CRITICAL: In TiDB Cloud, your username MUST be in the format 'ClusterID.root'.");
       console.error(`   Current DB_USER in environment: "${process.env.DB_USER}"`);
-      console.error("   Also, ensure your TiDB Cloud cluster has allowlisted the current IP (34.96.62.132).");
+      if (process.env.DB_USER?.endsWith('.root.root')) {
+        console.error("   ⚠️ DETECTED: Your DB_USER ends with '.root.root'. Please remove one '.root' from Secrets.");
+      }
+      console.error("   Also, ensure your TiDB Cloud cluster has allowlisted the current IP (34.96.62.174).");
     } else {
       console.error("❌ Database connection failed:", err.message);
     }
@@ -159,15 +165,17 @@ async function startServer() {
 
   app.post("/api/auth/login", async (req, res) => {
     const { username, password } = req.body;
+    const cleanUsername = username?.trim();
+    const cleanPassword = password?.trim();
     try {
-      const [rows]: any = await pool.execute("SELECT * FROM users WHERE username = ?", [username]);
+      const [rows]: any = await pool.execute("SELECT * FROM users WHERE username = ?", [cleanUsername]);
       const user = rows[0];
       if (!user) {
-        console.warn(`Login failed: User "${username}" not found.`);
+        console.warn(`Login failed: User "${cleanUsername}" not found.`);
         return res.status(401).json({ message: "خطأ في اسم المستخدم أو كلمة المرور" });
       }
-      if (!bcrypt.compareSync(password, user.password)) {
-        console.warn(`Login failed: Incorrect password for user "${username}".`);
+      if (!bcrypt.compareSync(cleanPassword, user.password)) {
+        console.warn(`Login failed: Incorrect password for user "${cleanUsername}".`);
         return res.status(401).json({ message: "خطأ في اسم المستخدم أو كلمة المرور" });
       }
       const token = jwt.sign({ id: user.id, username: user.username, role: user.role, department_id: user.department_id, job_level_id: user.job_level_id }, JWT_SECRET);
@@ -292,13 +300,24 @@ async function startServer() {
     try {
       await connection.beginTransaction();
       for (const u of users) {
-        const hp = bcrypt.hashSync(u.password || '123456', 10);
-        await connection.execute("INSERT IGNORE INTO users (username, password, full_name, department_id, job_level_id, mobile, status) VALUES (?, ?, ?, ?, ?, ?, ?)", [u.username, hp, u.full_name, u.department_id || null, u.job_level_id || null, u.mobile, u.status || 'active']);
+        const hp = bcrypt.hashSync(String(u.password || '123456'), 10);
+        await connection.execute(`
+          INSERT INTO users (username, password, full_name, department_id, job_level_id, mobile, status) 
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          ON DUPLICATE KEY UPDATE 
+          password = VALUES(password),
+          full_name = VALUES(full_name),
+          department_id = VALUES(department_id),
+          job_level_id = VALUES(job_level_id),
+          mobile = VALUES(mobile),
+          status = VALUES(status)
+        `, [u.username, hp, u.full_name, u.department_id || null, u.job_level_id || null, u.mobile, u.status || 'active']);
       }
       await connection.commit();
       res.json({ message: "Bulk import complete" });
     } catch (err) {
       await connection.rollback();
+      console.error("Bulk Import Error:", err);
       res.status(500).json({ message: "Bulk import failed" });
     } finally {
       connection.release();
