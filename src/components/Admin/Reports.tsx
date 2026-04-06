@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { FileText, Users, CheckCircle, Clock, Download, Printer, ChevronRight, Search, TrendingUp, Activity, Target } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar 
+  PieChart, Pie, Cell, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
+  LineChart, Line, Legend, AreaChart, Area
 } from 'recharts';
 import api from '../../lib/api';
 import { cn } from '../../lib/utils';
 import * as XLSX from 'xlsx';
+import { LayoutGrid, List, Filter, ChevronDown, ChevronUp } from 'lucide-react';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
@@ -18,6 +20,13 @@ export default function Reports() {
   const [loading, setLoading] = useState(true);
   const [surveys, setSurveys] = useState<any[]>([]);
   const [selectedId, setSelectedId] = useState<string | undefined>(id);
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [expandedQuestions, setExpandedQuestions] = useState<Record<string, boolean>>({});
+
+  const toggleQuestion = (qid: string) => {
+    setExpandedQuestions(prev => ({ ...prev, [qid]: !prev[qid] }));
+  };
 
   useEffect(() => {
     if (!selectedId) {
@@ -137,6 +146,11 @@ export default function Reports() {
 
   if (!report) return <div className="p-10 text-center font-bold text-red-400">التقرير غير موجود</div>;
 
+  const filteredQuestions = report.questions?.filter((q: any) => 
+    q.text.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    q.group_title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <div className="p-4 md:p-10 space-y-8 print:p-0" dir="rtl">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 no-print">
@@ -172,9 +186,9 @@ export default function Reports() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.1 }}
-            className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex items-center gap-5"
+            className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex items-center gap-5 group hover:shadow-lg hover:shadow-slate-200/50 transition-all"
           >
-            <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center", 
+            <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center transition-transform group-hover:scale-110", 
               stat.color === 'blue' ? "bg-blue-50 text-blue-600" :
               stat.color === 'green' ? "bg-green-50 text-green-600" :
               stat.color === 'purple' ? "bg-purple-50 text-purple-600" :
@@ -190,6 +204,19 @@ export default function Reports() {
         ))}
       </div>
 
+      {/* Quick Filters Bar */}
+      <div className="bg-white p-4 rounded-3xl border border-slate-100 flex flex-wrap items-center gap-4 no-print">
+        <span className="text-sm font-black text-slate-400 uppercase tracking-widest mr-2">تصفية سريعة:</span>
+        {['الكل', 'الأسئلة المغلقة', 'الأسئلة المفتوحة', 'الأعلى تقييماً', 'الأقل تقييماً'].map((filter) => (
+          <button 
+            key={filter}
+            className="px-4 py-2 rounded-xl text-xs font-bold bg-slate-50 text-slate-600 hover:bg-blue-50 hover:text-blue-600 transition-all border border-transparent hover:border-blue-100"
+          >
+            {filter}
+          </button>
+        ))}
+      </div>
+
       {/* Group Analysis Chart */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
@@ -197,19 +224,38 @@ export default function Reports() {
             <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
               <Activity className="w-6 h-6 text-blue-600" /> أداء المجموعات
             </h3>
+            <div className="flex gap-2 bg-slate-50 p-1 rounded-xl no-print">
+              <button 
+                onClick={() => setViewMode('grid')}
+                className={cn("p-2 rounded-lg transition-all", viewMode === 'grid' ? "bg-white shadow-sm text-blue-600" : "text-slate-400")}
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+              <button 
+                onClick={() => setViewMode('list')}
+                className={cn("p-2 rounded-lg transition-all", viewMode === 'list' ? "bg-white shadow-sm text-blue-600" : "text-slate-400")}
+              >
+                <List className="w-4 h-4" />
+              </button>
+            </div>
           </div>
           <div className="h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={report.groupAnalysis}>
+              <AreaChart data={report.groupAnalysis}>
+                <defs>
+                  <linearGradient id="colorAvg" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                 <XAxis dataKey="title" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12, fontWeight: 600 }} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12, fontWeight: 600 }} />
                 <Tooltip 
                   contentStyle={{ borderRadius: '1rem', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                  cursor={{ fill: '#f8fafc' }}
                 />
-                <Bar dataKey="avgRating" name="متوسط التقييم" fill="#3b82f6" radius={[8, 8, 0, 0]} barSize={40} />
-              </BarChart>
+                <Area type="monotone" dataKey="avgRating" name="متوسط التقييم" stroke="#3b82f6" fillOpacity={1} fill="url(#colorAvg)" strokeWidth={3} />
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
@@ -233,90 +279,124 @@ export default function Reports() {
 
       {/* Questions Analysis */}
       <div className="space-y-8">
-        <h2 className="text-2xl font-black text-slate-900">التحليل التفصيلي للأسئلة</h2>
-        {report.questions?.map((q: any, i: number) => (
-          <motion.div
-            key={q.id}
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: i * 0.05 }}
-            className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 break-inside-avoid"
-          >
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-              <div className="space-y-1">
-                <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full">{q.group_title}</span>
-                <h3 className="text-xl font-bold text-slate-900">{q.text}</h3>
-              </div>
-              <div className="flex items-center gap-4 bg-slate-50 px-4 py-2 rounded-2xl">
-                <div className="text-center">
-                  <p className="text-[10px] font-black text-slate-400 uppercase">الاستجابات</p>
-                  <p className="text-lg font-black text-slate-900">{q.responseCount}</p>
-                </div>
-              </div>
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 no-print">
+          <h2 className="text-2xl font-black text-slate-900">التحليل التفصيلي للأسئلة</h2>
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <div className="relative flex-grow md:w-64">
+              <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="بحث في الأسئلة..." 
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pr-10 pl-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+              />
             </div>
+            <button className="p-2 bg-white border border-slate-200 rounded-xl text-slate-500 hover:bg-slate-50">
+              <Filter className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
 
-            {q.type === 'rating' && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {[
-                  { label: 'المتوسط الحسابي', value: q.analysis.average, desc: 'Mean' },
-                  { label: 'الوسيط الإحصائي', value: q.analysis.median, desc: 'Median' },
-                  { label: 'المنوال (الأكثر تكراراً)', value: q.analysis.mode, desc: 'Mode' },
-                ].map((stat, idx) => (
-                  <div key={idx} className="p-6 bg-slate-50 rounded-3xl border border-slate-100 text-center">
-                    <p className="text-xs font-black text-slate-400 uppercase tracking-wider mb-2">{stat.label}</p>
-                    <p className="text-3xl font-black text-blue-600 mb-1">{stat.value}</p>
-                    <p className="text-[10px] font-bold text-slate-400">{stat.desc}</p>
+        <div className={cn(
+          "grid gap-8",
+          viewMode === 'grid' ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1"
+        )}>
+          {filteredQuestions?.map((q: any, i: number) => (
+            <motion.div
+              key={q.id}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.05 }}
+              className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 break-inside-avoid h-full flex flex-col"
+            >
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+                <div className="space-y-1 flex-grow">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-full">{q.group_title}</span>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-3 py-1 rounded-full">{q.type}</span>
                   </div>
-                ))}
+                  <h3 className="text-xl font-bold text-slate-900">{q.text}</h3>
+                </div>
+                <div className="flex items-center gap-4 no-print">
+                  <button 
+                    onClick={() => toggleQuestion(q.id)}
+                    className="p-2 hover:bg-slate-50 rounded-lg text-slate-400 transition-all"
+                  >
+                    {expandedQuestions[q.id] ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                  </button>
+                </div>
               </div>
-            )}
 
-            {q.type === 'choice' && q.analysis?.distribution && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-                <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={Object.entries(q.analysis.distribution).map(([name, value]) => ({ name, value }))}
-                        cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value"
-                      >
-                        {Object.entries(q.analysis.distribution).map((_, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+              <AnimatePresence initial={false}>
+                {(!expandedQuestions[q.id] || viewMode === 'list') && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden flex-grow"
+                  >
+                    {q.type === 'rating' && (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                        {[
+                          { label: 'المتوسط', value: q.analysis.average, color: 'text-blue-600' },
+                          { label: 'الوسيط', value: q.analysis.median, color: 'text-purple-600' },
+                          { label: 'المنوال', value: q.analysis.mode, color: 'text-green-600' },
+                        ].map((stat, idx) => (
+                          <div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-center">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">{stat.label}</p>
+                            <p className={cn("text-2xl font-black", stat.color)}>{stat.value}</p>
+                          </div>
                         ))}
-                      </Pie>
-                      <Tooltip />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="space-y-3">
-                  {Object.entries(q.analysis.distribution).map(([name, value]: [string, any], index) => (
-                    <div key={name} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl">
-                      <div className="flex items-center gap-3">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
-                        <span className="text-sm font-medium text-slate-700">{name}</span>
                       </div>
-                      <span className="text-sm font-bold text-slate-900">{value} ({((value / q.responseCount) * 100).toFixed(0)}%)</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+                    )}
 
-            {q.type === 'text' && q.analysis?.rawAnswers && (
-              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-                {q.analysis.rawAnswers.map((ans: any, idx: number) => (
-                  <div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                    <p className="text-sm text-slate-700 leading-relaxed mb-2">{ans.answer_text}</p>
-                    <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                      <Users className="w-3 h-3" />
-                      <span>{ans.full_name}</span>
-                    </div>
-                  </div>
-                ))}
+                    {q.type === 'choice' && q.analysis?.distribution && (
+                      <div className="flex flex-col gap-6">
+                        <div className="h-48 w-full">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart layout="vertical" data={Object.entries(q.analysis.distribution).map(([name, value]) => ({ name, value }))}>
+                              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                              <XAxis type="number" hide />
+                              <YAxis dataKey="name" type="category" width={100} axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 10, fontWeight: 600 }} />
+                              <Tooltip cursor={{ fill: '#f8fafc' }} />
+                              <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20}>
+                                {Object.entries(q.analysis.distribution).map((_, index) => (
+                                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                ))}
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    )}
+
+                    {q.type === 'text' && q.analysis?.rawAnswers && (
+                      <div className="space-y-3 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
+                        {q.analysis.rawAnswers.slice(0, 5).map((ans: any, idx: number) => (
+                          <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                            <p className="text-xs text-slate-700 leading-relaxed">{ans.answer_text}</p>
+                          </div>
+                        ))}
+                        {q.analysis.rawAnswers.length > 5 && (
+                          <p className="text-center text-[10px] font-bold text-slate-400 uppercase">+{q.analysis.rawAnswers.length - 5} إجابات أخرى</p>
+                        )}
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div className="mt-auto pt-6 border-t border-slate-50 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Users className="w-4 h-4 text-slate-300" />
+                  <span className="text-xs font-bold text-slate-500">{q.responseCount} مشارك</span>
+                </div>
+                <button className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:underline">التفاصيل الكاملة</button>
               </div>
-            )}
-          </motion.div>
-        ))}
+            </motion.div>
+          ))}
+        </div>
       </div>
     </div>
   );
